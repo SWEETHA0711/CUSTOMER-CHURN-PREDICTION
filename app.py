@@ -2,10 +2,8 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import joblib
 
-from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score,
     f1_score, roc_auc_score, confusion_matrix,
@@ -14,9 +12,18 @@ from sklearn.metrics import (
 from sklearn.inspection import PartialDependenceDisplay
 
 st.set_page_config(page_title="Customer Churn Prediction", layout="wide")
-
 st.title("📊 Customer Churn Prediction System")
-st.markdown("End-to-end Machine Learning Project using Random Forest")
+st.markdown("Random Forest based Customer Churn Analysis")
+
+# ===================== LOAD ARTIFACTS =====================
+@st.cache_resource
+def load_artifacts():
+    model = joblib.load("rf_model.pkl")
+    scaler = joblib.load("scaler.pkl")
+    features = joblib.load("features.pkl")
+    return model, scaler, features
+
+rf_model, scaler, feature_cols = load_artifacts()
 
 # ===================== LOAD DATA =====================
 @st.cache_data
@@ -29,26 +36,6 @@ st.header("1️⃣ Dataset Overview")
 st.write(df.head())
 st.write("Dataset Shape:", df.shape)
 
-# ===================== EDA =====================
-st.header("2️⃣ Exploratory Data Analysis")
-
-fig, ax = plt.subplots()
-df['Churn'].value_counts().plot(kind='bar', ax=ax)
-ax.set_title("Churn Distribution")
-st.pyplot(fig)
-
-fig, ax = plt.subplots()
-df.boxplot(column='tenure', by='Churn', ax=ax)
-ax.set_title("Churn vs Tenure")
-plt.suptitle("")
-st.pyplot(fig)
-
-fig, ax = plt.subplots()
-df.boxplot(column='MonthlyCharges', by='Churn', ax=ax)
-ax.set_title("Churn vs Monthly Charges")
-plt.suptitle("")
-st.pyplot(fig)
-
 # ===================== DATA CLEANING =====================
 df['MultipleLines'] = df['MultipleLines'].replace('No phone service', 'No')
 
@@ -60,7 +47,7 @@ for col in internet_cols:
     df[col] = df[col].replace('No internet service', 'No')
 
 df['TotalCharges'] = pd.to_numeric(df['TotalCharges'], errors='coerce')
-df['TotalCharges'].fillna(df['TotalCharges'].median(), inplace=True)
+df['TotalCharges'] = df['TotalCharges'].fillna(df['TotalCharges'].median())
 df.drop('customerID', axis=1, inplace=True)
 df.drop_duplicates(inplace=True)
 
@@ -68,9 +55,7 @@ df.drop_duplicates(inplace=True)
 df['AvgChargesPerMonth'] = df['TotalCharges'] / (df['tenure'] + 1)
 df['IsLongTermContract'] = df['Contract'].apply(lambda x: 1 if x in ['One year','Two year'] else 0)
 
-service_features = internet_cols
-df['NumServicesSubscribed'] = df[service_features].apply(lambda x: sum(x == 'Yes'), axis=1)
-
+df['NumServicesSubscribed'] = df[internet_cols].apply(lambda x: sum(x == 'Yes'), axis=1)
 df['HighMonthlyCharge'] = (df['MonthlyCharges'] > df['MonthlyCharges'].quantile(0.75)).astype(int)
 df['SeniorCitizen'] = df['SeniorCitizen'].astype(int)
 
@@ -78,77 +63,48 @@ df['SeniorCitizen'] = df['SeniorCitizen'].astype(int)
 X = df.drop('Churn', axis=1)
 y = df['Churn'].map({'No': 0, 'Yes': 1})
 
-categorical_cols = X.select_dtypes(include='object').columns
-numerical_cols = X.select_dtypes(exclude='object').columns
+X_encoded = pd.get_dummies(X, drop_first=True)
+X_encoded = X_encoded.reindex(columns=feature_cols, fill_value=0)
+X_encoded[X_encoded.columns] = scaler.transform(X_encoded)
 
-X_encoded = pd.get_dummies(X, columns=categorical_cols, drop_first=True)
-
-scaler = StandardScaler()
-X_encoded[numerical_cols] = scaler.fit_transform(X_encoded[numerical_cols])
-
-X_train, X_test, y_train, y_test = train_test_split(
-    X_encoded, y, test_size=0.2, random_state=42, stratify=y
-)
+# ===================== PREDICTIONS =====================
+y_pred = rf_model.predict(X_encoded)
+y_prob = rf_model.predict_proba(X_encoded)[:,1]
 
 # ===================== CLASS BALANCE =====================
-st.header("3️⃣ Class Balance")
+st.header("2️⃣ Class Balance")
+
 fig, ax = plt.subplots()
-y_train.value_counts().plot(kind='pie', autopct='%1.1f%%', ax=ax)
+y.value_counts().plot(kind='pie', autopct='%1.1f%%', ax=ax)
 ax.set_ylabel("")
 st.pyplot(fig)
 
-# ===================== MODEL & TUNING =====================
-st.header("4️⃣ Model Training & Hyperparameter Tuning")
+# ===================== MODEL METRICS =====================
+st.header("3️⃣ Model Performance")
 
-param_grid = {
-    'n_estimators': [100, 200],
-    'max_depth': [None, 20],
-    'min_samples_split': [2, 5],
-    'min_samples_leaf': [1, 2],
-    'class_weight': ['balanced']
-}
+st.metric("Accuracy", round(accuracy_score(y, y_pred), 3))
+st.metric("Precision", round(precision_score(y, y_pred), 3))
+st.metric("Recall", round(recall_score(y, y_pred), 3))
+st.metric("F1 Score", round(f1_score(y, y_pred), 3))
+st.metric("ROC AUC", round(roc_auc_score(y, y_prob), 3))
 
-grid = GridSearchCV(
-    RandomForestClassifier(random_state=42),
-    param_grid,
-    scoring='recall',
-    cv=3,
-    n_jobs=-1
-)
-grid.fit(X_train, y_train)
-rf_best = grid.best_estimator_
-
-st.write("Best Parameters:", grid.best_params_)
-
-# ===================== EVALUATION =====================
-st.header("5️⃣ Model Evaluation")
-
-y_pred = rf_best.predict(X_test)
-y_prob = rf_best.predict_proba(X_test)[:,1]
-
-st.metric("Accuracy", round(accuracy_score(y_test, y_pred), 3))
-st.metric("Precision", round(precision_score(y_test, y_pred), 3))
-st.metric("Recall", round(recall_score(y_test, y_pred), 3))
-st.metric("F1 Score", round(f1_score(y_test, y_pred), 3))
-st.metric("ROC AUC", round(roc_auc_score(y_test, y_prob), 3))
-
-# Confusion Matrix
+# ===================== CONFUSION MATRIX =====================
 fig, ax = plt.subplots()
-ConfusionMatrixDisplay(confusion_matrix(y_test, y_pred)).plot(ax=ax)
+ConfusionMatrixDisplay(confusion_matrix(y, y_pred)).plot(ax=ax)
 st.pyplot(fig)
 
-# ROC Curve
-fpr, tpr, _ = roc_curve(y_test, y_prob)
+# ===================== ROC CURVE =====================
+fpr, tpr, _ = roc_curve(y, y_prob)
 fig, ax = plt.subplots()
-ax.plot(fpr, tpr, label="ROC Curve")
+ax.plot(fpr, tpr)
 ax.plot([0,1],[0,1],'--')
-ax.legend()
+ax.set_title("ROC Curve")
 st.pyplot(fig)
 
 # ===================== FEATURE IMPORTANCE =====================
-st.header("6️⃣ Feature Importance")
+st.header("4️⃣ Feature Importance")
 
-importances = pd.Series(rf_best.feature_importances_, index=X_encoded.columns)
+importances = pd.Series(rf_model.feature_importances_, index=feature_cols)
 top_features = importances.sort_values(ascending=False).head(10)
 
 fig, ax = plt.subplots()
@@ -157,65 +113,53 @@ ax.invert_yaxis()
 st.pyplot(fig)
 
 # ===================== PDP =====================
-st.header("7️⃣ Partial Dependence Plots")
+st.header("5️⃣ Partial Dependence Plots")
 
 top_3 = top_features.index[:3]
 fig, ax = plt.subplots(figsize=(10,4))
-PartialDependenceDisplay.from_estimator(rf_best, X_train, features=top_3, ax=ax)
+PartialDependenceDisplay.from_estimator(rf_model, X_encoded, features=top_3, ax=ax)
 st.pyplot(fig)
 
-
-st.header("8️⃣ Correlation Heatmap")
+# ===================== CORRELATION HEATMAP =====================
+st.header("6️⃣ Correlation Heatmap")
 
 numeric_features = [
-    'tenure', 'MonthlyCharges', 'TotalCharges',
-    'AvgChargesPerMonth', 'NumServicesSubscribed',
-    'HighMonthlyCharge', 'IsLongTermContract', 'SeniorCitizen'
+    'tenure','MonthlyCharges','TotalCharges',
+    'AvgChargesPerMonth','NumServicesSubscribed',
+    'HighMonthlyCharge','IsLongTermContract','SeniorCitizen'
 ]
 
-corr_matrix = X_encoded[numeric_features].corr()
-
+corr = X_encoded[numeric_features].corr()
 fig, ax = plt.subplots(figsize=(8,6))
-im = ax.imshow(corr_matrix, cmap='coolwarm')
+im = ax.imshow(corr, cmap='coolwarm')
 ax.set_xticks(range(len(numeric_features)))
 ax.set_yticks(range(len(numeric_features)))
 ax.set_xticklabels(numeric_features, rotation=45, ha="right")
 ax.set_yticklabels(numeric_features)
 fig.colorbar(im)
-ax.set_title("Correlation Heatmap of Numeric Features")
 st.pyplot(fig)
 
-
-st.header("9️⃣ Predicted Probability Distribution")
+# ===================== PROBABILITY HISTOGRAM =====================
+st.header("7️⃣ Predicted Probability Distribution")
 
 fig, ax = plt.subplots(figsize=(8,5))
-ax.hist(y_prob[y_test==0], bins=20, alpha=0.7, label='No Churn')
-ax.hist(y_prob[y_test==1], bins=20, alpha=0.7, label='Churn')
-ax.set_xlabel("Predicted Probability of Churn")
-ax.set_ylabel("Number of Customers")
-ax.set_title("Predicted Probability Histogram")
+ax.hist(y_prob[y==0], bins=20, alpha=0.7, label='No Churn')
+ax.hist(y_prob[y==1], bins=20, alpha=0.7, label='Churn')
 ax.legend()
 st.pyplot(fig)
 
-st.header("🔟 Partial Dependence & ICE Plots")
+# ===================== PDP + ICE =====================
+st.header("8️⃣ PDP & ICE Plots")
 
-top_numeric_features = [
-    'tenure',
-    'MonthlyCharges',
-    'NumServicesSubscribed'
-]
-
+top_numeric = ['tenure','MonthlyCharges','NumServicesSubscribed']
 fig, ax = plt.subplots(figsize=(12,6))
 PartialDependenceDisplay.from_estimator(
-    rf_best,
-    X_train,
-    features=top_numeric_features,
-    kind='both',  # PDP + ICE
-    grid_resolution=50,
+    rf_model,
+    X_encoded,
+    features=top_numeric,
+    kind='both',
     ax=ax
 )
 st.pyplot(fig)
 
-
 st.success("✅ Application Loaded Successfully")
-
