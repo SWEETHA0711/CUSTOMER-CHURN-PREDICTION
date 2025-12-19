@@ -14,7 +14,7 @@ from sklearn.inspection import PartialDependenceDisplay
 
 st.set_page_config(page_title="Customer Churn Prediction", layout="wide")
 
-st.title("📊 Customer Churn Prediction System")
+st.title("Customer Churn Prediction System")
 st.markdown("End-to-End Machine Learning Project using Random Forest")
 
 # ===================== LOAD DATA =====================
@@ -72,19 +72,19 @@ def train_model(X_train, y_train):
 rf_model = train_model(X_train, y_train)
 
 # ===================== DATASET OVERVIEW =====================
-st.header("1️⃣ Dataset Overview")
+st.header("1. Dataset Overview")
 st.write(df.head())
 st.write("Dataset Shape:", df.shape)
 
 # ===================== CLASS BALANCE =====================
-st.header("2️⃣ Class Balance")
+st.header("2. Class Balance")
 fig, ax = plt.subplots()
 y_train.value_counts().plot(kind='pie', autopct='%1.1f%%', ax=ax)
 ax.set_ylabel("")
 st.pyplot(fig)
 
 # ===================== MODEL EVALUATION =====================
-st.header("3️⃣ Model Evaluation")
+st.header("3. Model Evaluation")
 
 y_pred = rf_model.predict(X_test)
 y_prob = rf_model.predict_proba(X_test)[:,1]
@@ -109,7 +109,7 @@ ax.legend()
 st.pyplot(fig)
 
 # ===================== FEATURE IMPORTANCE =====================
-st.header("4️⃣ Feature Importance")
+st.header("4. Feature Importance")
 
 importances = pd.Series(rf_model.feature_importances_, index=X.columns)
 top_features = importances.sort_values(ascending=False).head(10)
@@ -120,7 +120,7 @@ ax.invert_yaxis()
 st.pyplot(fig)
 
 # ===================== CORRELATION HEATMAP =====================
-st.header("5️⃣ Correlation Heatmap")
+st.header("5. Correlation Heatmap")
 
 numeric_features = [
     'tenure', 'MonthlyCharges', 'TotalCharges',
@@ -140,7 +140,7 @@ fig.colorbar(im)
 st.pyplot(fig)
 
 # ===================== PROBABILITY DISTRIBUTION =====================
-st.header("6️⃣ Predicted Probability Distribution")
+st.header("6. Predicted Probability Distribution")
 
 fig, ax = plt.subplots()
 ax.hist(y_prob[y_test==0], bins=20, alpha=0.7, label='No Churn')
@@ -150,7 +150,7 @@ ax.legend()
 st.pyplot(fig)
 
 # ===================== PDP & ICE =====================
-st.header("7️⃣ Partial Dependence & ICE Plots")
+st.header("7. Partial Dependence & ICE Plots")
 
 top_numeric = ['tenure', 'MonthlyCharges', 'NumServicesSubscribed']
 fig, ax = plt.subplots(figsize=(12,6))
@@ -165,3 +165,4 @@ PartialDependenceDisplay.from_estimator(
 st.pyplot(fig)
 
 st.success("✅ Application Loaded Successfully")
+
