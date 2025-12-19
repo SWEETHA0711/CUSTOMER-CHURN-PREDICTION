@@ -164,4 +164,58 @@ fig, ax = plt.subplots(figsize=(10,4))
 PartialDependenceDisplay.from_estimator(rf_best, X_train, features=top_3, ax=ax)
 st.pyplot(fig)
 
+
+st.header("8️⃣ Correlation Heatmap")
+
+numeric_features = [
+    'tenure', 'MonthlyCharges', 'TotalCharges',
+    'AvgChargesPerMonth', 'NumServicesSubscribed',
+    'HighMonthlyCharge', 'IsLongTermContract', 'SeniorCitizen'
+]
+
+corr_matrix = X_encoded[numeric_features].corr()
+
+fig, ax = plt.subplots(figsize=(8,6))
+im = ax.imshow(corr_matrix, cmap='coolwarm')
+ax.set_xticks(range(len(numeric_features)))
+ax.set_yticks(range(len(numeric_features)))
+ax.set_xticklabels(numeric_features, rotation=45, ha="right")
+ax.set_yticklabels(numeric_features)
+fig.colorbar(im)
+ax.set_title("Correlation Heatmap of Numeric Features")
+st.pyplot(fig)
+
+
+st.header("9️⃣ Predicted Probability Distribution")
+
+fig, ax = plt.subplots(figsize=(8,5))
+ax.hist(y_prob[y_test==0], bins=20, alpha=0.7, label='No Churn')
+ax.hist(y_prob[y_test==1], bins=20, alpha=0.7, label='Churn')
+ax.set_xlabel("Predicted Probability of Churn")
+ax.set_ylabel("Number of Customers")
+ax.set_title("Predicted Probability Histogram")
+ax.legend()
+st.pyplot(fig)
+
+st.header("🔟 Partial Dependence & ICE Plots")
+
+top_numeric_features = [
+    'tenure',
+    'MonthlyCharges',
+    'NumServicesSubscribed'
+]
+
+fig, ax = plt.subplots(figsize=(12,6))
+PartialDependenceDisplay.from_estimator(
+    rf_best,
+    X_train,
+    features=top_numeric_features,
+    kind='both',  # PDP + ICE
+    grid_resolution=50,
+    ax=ax
+)
+st.pyplot(fig)
+
+
 st.success("✅ Application Loaded Successfully")
+
